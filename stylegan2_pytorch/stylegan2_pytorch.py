@@ -896,6 +896,7 @@ class Trainer():
         print('Pruning threshold: {}'.format(thre))
         zero_flag = False
         self.masks = OrderedDict()
+        
         for k, m in enumerate(self.GAN.G.modules()):
             if isinstance(m, Conv2DMod):
                 weight_copy = m.weight.data.abs().clone()
@@ -906,7 +907,10 @@ class Trainer():
                 print('layer index: {:d} \t total params: {:d} \t remaining params: {:d}'.
                     format(k, mask.numel(), int(torch.sum(mask))))
         print('Total conv params: {}, Pruned conv params: {}, Pruned ratio: {}'.format(total, pruned, pruned / total))
-    
+        self.init_GAN()
+        for k, m in enumerate(self.GAN.G.modules()):
+            if isinstance(m, Conv2DMod):
+                m.weight.data.mul_(self.masks[k])
 
     def write_config(self):
         self.config_path.write_text(json.dumps(self.config()))
