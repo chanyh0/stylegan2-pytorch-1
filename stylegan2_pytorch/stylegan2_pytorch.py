@@ -882,8 +882,8 @@ class Trainer():
         index = 0
         for m in self.GAN.G.modules():
             if isinstance(m, Conv2DMod):
-                size = m.weight_orig.data.numel()
-                conv_weights[index:(index + size)] = m.weight_orig.data.view(-1).abs().clone()
+                size = m.weight.data.numel()
+                conv_weights[index:(index + size)] = m.weight.data.view(-1).abs().clone()
                 index += size
 
         y, i = torch.sort(conv_weights)
