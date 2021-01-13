@@ -43,6 +43,7 @@ except:
     APEX_AVAILABLE = False
 
 
+from collections import OrderedDict
 import torch.nn.utils.prune as prune # add prune
 
 import aim
@@ -812,6 +813,18 @@ class Trainer():
 
         self.logger = aim.Session(experiment=name) if log else None
 
+        self.pruned_round = 0
+
+        self.GAN_S_init = None
+        self.GAN_D_init = None
+        self.GAN_G_init = None
+        self.GAN_D_aug_init = None
+
+        self.masks = dict()
+    
+    def set_pruned_round(self, round_):
+        self.pruned_round = round_
+
     @property
     def image_extension(self):
         return 'jpg' if not self.transparent else 'png'
@@ -828,6 +841,25 @@ class Trainer():
         args, kwargs = self.GAN_params
         self.GAN = StyleGAN2(lr = self.lr, lr_mlp = self.lr_mlp, ttur_mult = self.ttur_mult, image_size = self.image_size, network_capacity = self.network_capacity, fmap_max = self.fmap_max, transparent = self.transparent, fq_layers = self.fq_layers, fq_dict_size = self.fq_dict_size, attn_layers = self.attn_layers, fp16 = self.fp16, cl_reg = self.cl_reg, no_const = self.no_const, rank = self.rank, *args, **kwargs)
 
+        # save init
+
+        if self.GAN_D_init is None:
+            self.GAN_D_init = self.GAN.D.state_dict()
+            self.GAN_S_init = self.GAN.S.state_dict()
+            self.GAN_G_init = self.GAN.G.state_dict()
+            self.GAN_D_aug_init = self.GAN.D_aug.state_dict()
+
+            torch.save(self.GAN_D_init, "GAN_D_init.pth.tar")
+            torch.save(self.GAN_G_init, "GAN_G_init.pth.tar")
+            torch.save(self.GAN_S_init, "GAN_S_init.pth.tar")
+            torch.save(self.GAN_D_aug_init, "GAN_D_aug_init.pth.tar")
+
+        else:
+            self.GAN.D.load_state_dict(self.GAN_D_init)
+            self.GAN.S.load_state_dict(self.GAN_S_init)
+            self.GAN.G.load_state_dict(self.GAN_G_init)
+            self.GAN.D_aug.load_state_dict(self.GAN_D_aug_init)
+
         if self.is_ddp:
             ddp_kwargs = {'device_ids': [self.rank]}
             self.S_ddp = DDP(self.GAN.S, **ddp_kwargs)
@@ -837,6 +869,44 @@ class Trainer():
 
         if exists(self.logger):
             self.logger.set_params(self.hparams)
+
+    def prune(self):
+        total = 0
+        total_nonzero = 0
+        for m in self.GAN.G.modules():
+            if isinstance(m, Conv2DMod):
+                total += m.weight.data.numel()
+                mask = m.weight.data.abs().clone().gt(0).float().cuda()
+                total_nonzero += torch.sum(mask)
+        conv_weights = torch.zeros(total)
+        index = 0
+        for m in self.GAN.G.modules():
+            if isinstance(m, Conv2DMod):
+                size = m.weight_orig.data.numel()
+                conv_weights[index:(index + size)] = m.weight_orig.data.view(-1).abs().clone()
+                index += size
+
+        y, i = torch.sort(conv_weights)
+        # thre_index = int(total * args.percent)
+        # only care about the non zero weights
+        # e.g: total = 100, total_nonzero = 80, percent = 0.2, thre_index = 36, that means keep 64
+        thre_index = total - total_nonzero + int(total_nonzero * 0.2)
+        thre = y[int(thre_index)]
+        pruned = 0
+        print('Pruning threshold: {}'.format(thre))
+        zero_flag = False
+        self.masks = OrderedDict()
+        for k, m in enumerate(self.GAN.G.modules()):
+            if isinstance(m, Conv2DMod):
+                weight_copy = m.weight.data.abs().clone()
+                mask = weight_copy.gt(thre).float()
+                self.masks[k] = mask
+                pruned = pruned + mask.numel() - torch.sum(mask)
+                m.weight.data.mul_(mask)
+                print('layer index: {:d} \t total params: {:d} \t remaining params: {:d}'.
+                    format(k, mask.numel(), int(torch.sum(mask))))
+        print('Total conv params: {}, Pruned conv params: {}, Pruned ratio: {}'.format(total, pruned, pruned / total))
+    
 
     def write_config(self):
         self.config_path.write_text(json.dumps(self.config()))
@@ -1021,8 +1091,10 @@ class Trainer():
 
             total_gen_loss += loss.detach().item() / self.gradient_accumulate_every
 
-            for name, m in G.named_modules():
-                print(name)
+            if len(self.masks) != 0:
+                for k, m in enumerate(G.modules()):
+                    if isinstance(m, Conv2DMod):
+                        m.weight.grad.mul_(self.masks[k])
 
         self.g_loss = float(total_gen_loss)
         self.track(self.g_loss, 'G')
@@ -1245,8 +1317,8 @@ class Trainer():
             return
         self.logger.track(value, name = name)
 
-    def model_name(self, num, pruned_round=0):
-        return str(self.models_dir / self.name / f'model_{pruned_round}_{num}.pt')
+    def model_name(self, num):
+        return str(self.models_dir / self.name / f'model_{self.pruned_round}_{num}.pt')
 
     def init_folders(self):
         (self.results_dir / self.name).mkdir(parents=True, exist_ok=True)
@@ -1258,18 +1330,18 @@ class Trainer():
         rmtree(str(self.config_path), True)
         self.init_folders()
 
-    def save(self, num, pruned_round=0):
+    def save(self, num):
         # Prune Round
         save_data = {
             'GAN': self.GAN.state_dict(),
             'version': __version__,
-            'round': pruned_round
+            'round': self.pruned_round
         }
 
         if self.GAN.fp16:
             save_data['amp'] = amp.state_dict()
 
-        torch.save(save_data, self.model_name(num, pruned_round))
+        torch.save(save_data, self.model_name(num))
         self.write_config()
 
     def load(self, num = -1):
