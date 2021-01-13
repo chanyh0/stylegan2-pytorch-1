@@ -64,7 +64,7 @@ def run_training(rank, world_size, model_args, data, load_from, new, num_train_s
 
         model.save(model.checkpoint_num)
         model.prune()
-
+        model.steps = 0
 
     if is_ddp:
         dist.destroy_process_group()
