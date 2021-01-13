@@ -42,6 +42,9 @@ try:
 except:
     APEX_AVAILABLE = False
 
+
+import torch.nn.utils.prune as prune # add prune
+
 import aim
 
 assert torch.cuda.is_available(), 'You need to have an Nvidia GPU with CUDA installed.'
@@ -1018,6 +1021,9 @@ class Trainer():
 
             total_gen_loss += loss.detach().item() / self.gradient_accumulate_every
 
+            for name, m in G.named_modules():
+                print(name)
+
         self.g_loss = float(total_gen_loss)
         self.track(self.g_loss, 'G')
 
@@ -1239,8 +1245,8 @@ class Trainer():
             return
         self.logger.track(value, name = name)
 
-    def model_name(self, num):
-        return str(self.models_dir / self.name / f'model_{num}.pt')
+    def model_name(self, num, pruned_round=0):
+        return str(self.models_dir / self.name / f'model_{pruned_round}_{num}.pt')
 
     def init_folders(self):
         (self.results_dir / self.name).mkdir(parents=True, exist_ok=True)
@@ -1252,16 +1258,18 @@ class Trainer():
         rmtree(str(self.config_path), True)
         self.init_folders()
 
-    def save(self, num):
+    def save(self, num, pruned_round=0):
+        # Prune Round
         save_data = {
             'GAN': self.GAN.state_dict(),
-            'version': __version__
+            'version': __version__,
+            'round': pruned_round
         }
 
         if self.GAN.fp16:
             save_data['amp'] = amp.state_dict()
 
-        torch.save(save_data, self.model_name(num))
+        torch.save(save_data, self.model_name(num, pruned_round))
         self.write_config()
 
     def load(self, num = -1):
