@@ -530,7 +530,7 @@ class Generator(nn.Module):
             )
             self.blocks.append(block)
 
-    def forward(self, styles, input_noise):
+    def forward(self, styles, input_noise, conv1=True, only_conv1=False):
         batch_size = styles.shape[0]
         image_size = self.image_size
 
@@ -542,14 +542,21 @@ class Generator(nn.Module):
 
         rgb = None
         styles = styles.transpose(0, 1)
-        x = self.initial_conv(x)
 
-        for style, block, attn in zip(styles, self.blocks, self.attns):
-            if exists(attn):
-                x = attn(x)
-            x, rgb = block(x, rgb, style, input_noise)
+        if conv1:
+            x = self.initial_conv(x)
+        else:
+            x = input_noise
+        
+        if only_conv1:
+            return x, styles
+        else:
+            for style, block, attn in zip(styles, self.blocks, self.attns):
+                if exists(attn):
+                    x = attn(x)
+                x, rgb = block(x, rgb, style, input_noise)
 
-        return rgb
+            return rgb
 
 class Discriminator(nn.Module):
     def __init__(self, image_size, network_capacity = 16, fq_layers = [], fq_dict_size = 256, attn_layers = [], transparent = False, fmap_max = 512):
@@ -593,26 +600,36 @@ class Discriminator(nn.Module):
         self.flatten = Flatten()
         self.to_logit = nn.Linear(latent_dim, 1)
 
-    def forward(self, x):
-        b, *_ = x.shape
+    def forward(self, x, l1=True, only_l1=False, q = None):
+        
+        if not only_l1:
+            b, *_ = x.shape
 
-        quantize_loss = torch.zeros(1).to(x)
+            quantize_loss = torch.zeros(1).to(x)
 
-        for (block, attn_block, q_block) in zip(self.blocks, self.attn_blocks, self.quantize_blocks):
-            x = block(x)
+            for (block, attn_block, q_block) in zip(self.blocks, self.attn_blocks, self.quantize_blocks):
+                x = block(x)
 
-            if exists(attn_block):
-                x = attn_block(x)
+                if exists(attn_block):
+                    x = attn_block(x)
 
-            if exists(q_block):
-                x, _, loss = q_block(x)
-                quantize_loss += loss
+                if exists(q_block):
+                    x, _, loss = q_block(x)
+                    quantize_loss += loss
 
-        x = self.final_conv(x)
-        x = self.flatten(x)
-        x = self.to_logit(x)
-        return x.squeeze(), quantize_loss
+            x = self.final_conv(x)
+            x = self.flatten(x)
+        else:
+            quantize_loss = q
 
+        if l1:
+            x = self.to_logit(x)
+            return x.squeeze(), quantize_loss
+
+        else:
+            return x.squeeze(), quantize_loss
+
+        
 class StyleGAN2(nn.Module):
     def __init__(self, image_size, latent_dim = 512, fmap_max = 512, style_depth = 8, network_capacity = 16, transparent = False, fp16 = False, cl_reg = False, steps = 1, lr = 1e-4, ttur_mult = 2, fq_layers = [], fq_dict_size = 256, attn_layers = [], no_const = False, lr_mlp = 0.1, rank = 0):
         super().__init__()
@@ -636,8 +653,8 @@ class StyleGAN2(nn.Module):
             self.D_cl = ContrastiveLearner(self.D, image_size, hidden_layer='flatten')
 
         # wrapper for augmenting all images going into the discriminator
-        self.D_aug = AugWrapper(self.D, image_size)
-
+        # self.D_aug = AugWrapper(self.D, image_size)
+        self.D_aug = self.D
         # turn off grad for exponential moving averages
         set_requires_grad(self.SE, False)
         set_requires_grad(self.GE, False)
@@ -938,20 +955,30 @@ class Trainer():
             w_styles = styles_def_to_tensor(w_space)
 
             generated_images = G(w_styles, noise)
-            fake_output, fake_q_loss = D_aug(generated_images.clone().detach(), detach = True, **aug_kwargs)
+            detached_generated_images = generated_images.clone().detach()
+            fake_output_clean, fake_q_loss = D_aug(detached_generated_images, l1=False)
+            
+            fake_output_adv = PGD(fake_output_clean, fake_q_loss, lambda x: F.relu(1 - x), D_aug)
+            fake_output_clean, fake_q_loss = D_aug(detached_generated_images)
+            fake_output_adv, _ = D_aug(fake_output_adv, q=fake_q_loss, only_l1=True)
 
             image_batch = next(self.loader).cuda(self.rank)
             image_batch.requires_grad_()
-            real_output, real_q_loss = D_aug(image_batch, **aug_kwargs)
+            real_output_clean, real_q_loss = D_aug(image_batch, l1=False)
+            real_output_adv = PGD(real_output_clean, real_q_loss, lambda x: F.relu(1 + x), D_aug)
+            real_output_clean, real_q_loss = D_aug(image_batch)
+            real_output_adv, _ = D_aug(real_output_clean, q=real_q_loss, only_l1=True)
 
-            real_output_loss = real_output
-            fake_output_loss = fake_output
 
             if self.rel_disc_loss:
-                real_output_loss = real_output_loss - fake_output.mean()
-                fake_output_loss = fake_output_loss - real_output.mean()
+                real_output_clean = real_output_clean - fake_output_clean.mean()
+                fake_output_clean = fake_output_clean - real_output_clean.mean()
+                real_output_adv = fake_output_adv - real_output_adv.mean()
+                fake_output_adv = fake_output_adv - real_output_adv.mean()
 
-            divergence = (F.relu(1 + real_output_loss) + F.relu(1 - fake_output_loss)).mean()
+
+            # divergence = (F.relu(1 + real_output_loss) + F.relu(1 - fake_output_loss)).mean()
+            divergence = ((F.relu(1 + real_output_clean) + F.relu(1 - fake_output_clean) + F.relu(1 + real_output_adv) + F.relu(1 - fake_output_adv)) / 2).mean()
             disc_loss = divergence
 
             if self.has_fq:
@@ -1315,3 +1342,35 @@ class ModelLoader:
         images = self.model.GAN.GE(w_tensors, noise)
         images.clamp_(0., 1.)
         return images
+
+
+
+def PGD(x, q_loss, loss, model=None, steps=1, gamma=0.1):
+    
+    # Compute loss
+    x_adv = x.clone()
+
+    for t in range(steps):
+        out = model(x_adv, q=q_loss, only_l1=True)
+        loss_adv0 = -loss(out)
+        grad0 = torch.autograd.grad(loss_adv0, x_adv, only_inputs=True)[0]
+        x_adv.data.add_(gamma * torch.sign(grad0.data))
+
+    return x_adv
+
+def PGD_G(x, gen_labels, label, loss, gen_model, dis_model, steps=1, gamma=0.1, eps=(1/255), randinit=False, clip=False):
+    
+    # Compute loss
+    x_adv = x.clone()
+    x_adv = x_adv.cuda()
+    x = x.cuda()
+
+    for t in range(steps):
+        out = gen_model(x_adv, gen_labels, l1=False)
+        out = dis_model(out, label)
+        loss_adv0 = -loss(out)
+        grad0 = torch.autograd.grad(loss_adv0, x_adv, only_inputs=True)[0]
+        x_adv.data.add_(gamma * torch.sign(grad0.data))
+
+
+    return x_adv
