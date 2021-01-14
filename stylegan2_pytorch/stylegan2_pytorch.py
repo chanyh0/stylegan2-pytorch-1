@@ -980,7 +980,8 @@ class Trainer():
             # divergence = (F.relu(1 + real_output_loss) + F.relu(1 - fake_output_loss)).mean()
             divergence = ((F.relu(1 + real_output_clean) + F.relu(1 - fake_output_clean) + F.relu(1 + real_output_adv) + F.relu(1 - fake_output_adv)) / 2).mean()
             disc_loss = divergence
-
+            real_output = real_output_clean
+    
             if self.has_fq:
                 quantize_loss = (fake_q_loss + real_q_loss).mean()
                 self.q_loss = float(quantize_loss.detach().item())
