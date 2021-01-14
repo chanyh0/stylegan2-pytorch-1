@@ -54,13 +54,17 @@ def run_training(rank, world_size, model_args, data, load_from, new, num_train_s
         model.clear()
 
     model.set_data_src(data)
+    
+    for state in range(10 + 1):
+        model.set_pruned_round(state)
+        for _ in tqdm(range(num_train_steps - model.steps), initial = model.steps, total = num_train_steps, mininterval=10., desc=f'{name}<{data}>'):
+            retry_call(model.train, tries=3, exceptions=NanException)
+            if is_main and _ % 50 == 0:
+                model.print_log()
 
-    for _ in tqdm(range(num_train_steps - model.steps), initial = model.steps, total = num_train_steps, mininterval=10., desc=f'{name}<{data}>'):
-        retry_call(model.train, tries=3, exceptions=NanException)
-        if is_main and _ % 50 == 0:
-            model.print_log()
-
-    model.save(model.checkpoint_num)
+        model.save(model.checkpoint_num)
+        model.prune()
+        model.steps = 0
 
     if is_ddp:
         dist.destroy_process_group()
@@ -72,7 +76,7 @@ def train_from_folder(
     name = 'default',
     new = False,
     load_from = -1,
-    image_size = 128,
+    image_size = 32,
     network_capacity = 16,
     fmap_max = 512,
     transparent = False,
