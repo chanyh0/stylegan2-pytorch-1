@@ -1016,9 +1016,18 @@ class Trainer():
             w_space = latent_to_w(S, style)
             w_styles = styles_def_to_tensor(w_space)
 
-            generated_images = G(w_styles, noise)
-            fake_output, _ = D_aug(generated_images, **aug_kwargs)
-            fake_output_loss = fake_output
+
+
+            generated_images_clean, style_clean = G(w_styles, noise, only_conv1=True)
+            generated_images_adv = PGD_G(generated_images_clean, style, G, D_aug)
+            generated_images_clean, style_clean = G(w_styles, noise, only_conv1=True)
+            generated_images_clean = G(style_clean, generated_images_clean, conv1=False)
+            generated_images_adv = G(style_clean, generated_images_adv, conv1=False)
+            
+            generated_images = generated_images_clean
+            fake_output_clean, _ = D_aug(generated_images_clean, **aug_kwargs)
+            fake_output_adv, _ = D_aug(generated_images_adv, **aug_kwargs)
+            fake_output_loss = (fake_output_clean + fake_output_adv) / 2
 
             if self.top_k_training:
                 epochs = (self.steps * batch_size * self.gradient_accumulate_every) / len(self.dataset)
@@ -1359,17 +1368,15 @@ def PGD(x, q_loss, loss, model=None, steps=1, gamma=0.1):
 
     return x_adv
 
-def PGD_G(x, gen_labels, label, loss, gen_model, dis_model, steps=1, gamma=0.1, eps=(1/255), randinit=False, clip=False):
+def PGD_G(x, style, gen_model, dis_model, steps=1, gamma=0.1, eps=(1/255), randinit=False, clip=False):
     
     # Compute loss
     x_adv = x.clone()
-    x_adv = x_adv.cuda()
-    x = x.cuda()
 
     for t in range(steps):
-        out = gen_model(x_adv, gen_labels, l1=False)
-        out = dis_model(out, label)
-        loss_adv0 = -loss(out)
+        out = gen_model(style, x_adv, conv1=False)
+        fake_output, _ = dis_model(out)
+        loss_adv0 = -torch.mean(fake_output)
         grad0 = torch.autograd.grad(loss_adv0, x_adv, only_inputs=True)[0]
         x_adv.data.add_(gamma * torch.sign(grad0.data))
 
