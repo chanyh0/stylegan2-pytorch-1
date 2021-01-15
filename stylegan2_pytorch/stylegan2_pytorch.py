@@ -958,14 +958,14 @@ class Trainer():
             detached_generated_images = generated_images.clone().detach()
             fake_output_clean, fake_q_loss = D_aug(detached_generated_images, l1=False)
 
-            fake_output_adv = PGD(fake_output_clean, fake_q_loss, lambda x: F.relu(1 - x), D_aug)
+            fake_output_adv = PGD_G(fake_output_clean, fake_q_loss, lambda x: F.relu(1 - x), D_aug)
             fake_output_clean, fake_q_loss = D_aug(detached_generated_images)
             fake_output_adv, _ = D_aug(fake_output_adv, q=fake_q_loss, only_l1=True)
 
             image_batch = next(self.loader).cuda(self.rank)
             image_batch.requires_grad_()
             real_output_clean, real_q_loss = D_aug(image_batch, l1=False)
-            real_output_adv = PGD(real_output_clean, real_q_loss, lambda x: F.relu(1 + x), D_aug)
+            real_output_adv = PGD_G(real_output_clean, real_q_loss, lambda x: F.relu(1 + x), D_aug)
             real_output_clean, real_q_loss = D_aug(image_batch)
             real_output_adv, _ = D_aug(real_output_clean, q=real_q_loss, only_l1=True)
 
@@ -1362,9 +1362,6 @@ def PGD(x, q_loss, loss, model=None, steps=1, gamma=0.1):
 
     for t in range(steps):
         out = model(x_adv, q=q_loss, l1=False)
-        print(out)
-        print(loss)
-        print(loss(out))
         loss_adv0 = -loss(out)
         grad0 = torch.autograd.grad(loss_adv0, x_adv, only_inputs=True)[0]
         x_adv.data.add_(gamma * torch.sign(grad0.data))
