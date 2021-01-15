@@ -1360,7 +1360,7 @@ def PGD(x, q_loss, loss, model=None, steps=1, gamma=0.1):
 
     for t in range(steps):
         out,_ = model(x_adv, q=q_loss, only_l1=True)
-        loss_adv0 = -loss(out)
+        loss_adv0 = -torch.mean(loss(out))
         grad0 = torch.autograd.grad(loss_adv0, x_adv, only_inputs=True)[0]
         x_adv.data.add_(gamma * torch.sign(grad0.data))
 
