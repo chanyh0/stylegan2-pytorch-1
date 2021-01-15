@@ -549,7 +549,7 @@ class Generator(nn.Module):
             x = prev_x
             rgb = None
         if only_conv1:
-            return x, styles, input_noise
+            return x, styles
         else:
             for style, block, attn in zip(styles, self.blocks, self.attns):
                 if exists(attn):
