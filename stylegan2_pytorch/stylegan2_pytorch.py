@@ -530,7 +530,7 @@ class Generator(nn.Module):
             )
             self.blocks.append(block)
 
-    def forward(self, styles, input_noise, conv1=True, only_conv1=False):
+    def forward(self, styles, input_noise, prev_x=None, conv1=True, only_conv1=False):
         if conv1:
             batch_size = styles.shape[0]
             image_size = self.image_size
@@ -546,11 +546,10 @@ class Generator(nn.Module):
             x = self.initial_conv(x)
 
         else:
-            x = input_noise
+            x = prev_x
             rgb = None
-            
         if only_conv1:
-            return x, styles
+            return x, styles, input_noise
         else:
             for style, block, attn in zip(styles, self.blocks, self.attns):
                 if exists(attn):
@@ -1018,10 +1017,10 @@ class Trainer():
             w_styles = styles_def_to_tensor(w_space)
 
             generated_images_clean, style_clean = G(w_styles, noise, only_conv1=True)
-            generated_images_adv = PGD_G(generated_images_clean, style, G, D_aug)
+            generated_images_adv = PGD_G(generated_images_clean, style, noise, G, D_aug)
             generated_images_clean, style_clean = G(w_styles, noise, only_conv1=True)
-            generated_images_clean = G(style_clean, generated_images_clean, conv1=False)
-            generated_images_adv = G(style_clean, generated_images_adv, conv1=False)
+            generated_images_clean = G(style_clean, noise, prev_x=generated_images_clean, conv1=False)
+            generated_images_adv = G(style_clean, noise, prev_x=generated_images_adv, conv1=False)
             
             generated_images = generated_images_clean
             fake_output_clean, _ = D_aug(generated_images_clean, **aug_kwargs)
@@ -1367,13 +1366,13 @@ def PGD(x, q_loss, loss, model=None, steps=1, gamma=0.1):
 
     return x_adv
 
-def PGD_G(x, style, gen_model, dis_model, steps=1, gamma=0.1, eps=(1/255), randinit=False, clip=False):
+def PGD_G(x, style, input_noise, gen_model, dis_model, steps=1, gamma=0.1, eps=(1/255), randinit=False, clip=False):
     
     # Compute loss
     x_adv = x.clone()
 
     for t in range(steps):
-        out = gen_model(style, x_adv, conv1=False)
+        out = gen_model(style, input_noise, prev_x=x_adv, conv1=False)
         fake_output, _ = dis_model(out)
         loss_adv0 = -torch.mean(fake_output)
         grad0 = torch.autograd.grad(loss_adv0, x_adv, only_inputs=True)[0]
