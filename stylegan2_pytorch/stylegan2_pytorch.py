@@ -623,6 +623,7 @@ class Discriminator(nn.Module):
             quantize_loss = q
 
         if l1:
+            print(x.shape)            
             x = self.to_logit(x)
             return x.squeeze(), quantize_loss
 
