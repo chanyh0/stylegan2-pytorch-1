@@ -1361,7 +1361,7 @@ def PGD(x, q_loss, loss, model=None, steps=1, gamma=0.1):
     x_adv = x.clone()
 
     for t in range(steps):
-        out = model(x_adv, q=q_loss, only_l1=True)
+        out = model(x_adv, q=q_loss, l1=False)
         print(out)
         print(loss)
         print(loss(out))
