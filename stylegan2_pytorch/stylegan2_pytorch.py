@@ -1023,8 +1023,8 @@ class Trainer():
             generated_images_adv = G(style_clean, noise, prev_x=generated_images_adv, conv1=False)
             
             generated_images = generated_images_clean
-            fake_output_clean, _ = D_aug(generated_images_clean, **aug_kwargs)
-            fake_output_adv, _ = D_aug(generated_images_adv, **aug_kwargs)
+            fake_output_clean, _ = D_aug(generated_images_clean)
+            fake_output_adv, _ = D_aug(generated_images_adv)
             fake_output_loss = (fake_output_clean + fake_output_adv) / 2
 
             if self.top_k_training:
