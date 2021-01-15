@@ -622,8 +622,7 @@ class Discriminator(nn.Module):
         else:
             quantize_loss = q
 
-        if l1:
-            print(x.shape)            
+        if l1:          
             x = self.to_logit(x)
             return x.squeeze(), quantize_loss
 
@@ -968,7 +967,7 @@ class Trainer():
             real_output_clean, real_q_loss = D_aug(image_batch, l1=False)
             real_output_adv = PGD(real_output_clean, real_q_loss, lambda x: F.relu(1 + x), D_aug)
             real_output_clean, real_q_loss = D_aug(image_batch)
-            real_output_adv, _ = D_aug(real_output_clean, q=real_q_loss, only_l1=True)
+            real_output_adv, _ = D_aug(real_output_adv, q=real_q_loss, only_l1=True)
 
 
             if self.rel_disc_loss:
