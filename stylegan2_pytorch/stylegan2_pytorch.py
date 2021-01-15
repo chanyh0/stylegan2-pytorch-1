@@ -958,14 +958,14 @@ class Trainer():
             detached_generated_images = generated_images.clone().detach()
             fake_output_clean, fake_q_loss = D_aug(detached_generated_images, l1=False)
 
-            fake_output_adv = PGD_G(fake_output_clean, fake_q_loss, lambda x: F.relu(1 - x), D_aug)
+            fake_output_adv = PGD(fake_output_clean, fake_q_loss, lambda x: F.relu(1 - x), D_aug)
             fake_output_clean, fake_q_loss = D_aug(detached_generated_images)
             fake_output_adv, _ = D_aug(fake_output_adv, q=fake_q_loss, only_l1=True)
 
             image_batch = next(self.loader).cuda(self.rank)
             image_batch.requires_grad_()
             real_output_clean, real_q_loss = D_aug(image_batch, l1=False)
-            real_output_adv = PGD_G(real_output_clean, real_q_loss, lambda x: F.relu(1 + x), D_aug)
+            real_output_adv = PGD(real_output_clean, real_q_loss, lambda x: F.relu(1 + x), D_aug)
             real_output_clean, real_q_loss = D_aug(image_batch)
             real_output_adv, _ = D_aug(real_output_clean, q=real_q_loss, only_l1=True)
 
@@ -1015,8 +1015,6 @@ class Trainer():
 
             w_space = latent_to_w(S, style)
             w_styles = styles_def_to_tensor(w_space)
-
-
 
             generated_images_clean, style_clean = G(w_styles, noise, only_conv1=True)
             generated_images_adv = PGD_G(generated_images_clean, style, G, D_aug)
