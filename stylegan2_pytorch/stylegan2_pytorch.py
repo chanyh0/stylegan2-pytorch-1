@@ -627,7 +627,7 @@ class Discriminator(nn.Module):
             return x.squeeze(), quantize_loss
 
         else:
-            return x.squeeze(), quantize_loss
+            return x, quantize_loss
 
         
 class StyleGAN2(nn.Module):
