@@ -547,7 +547,8 @@ class Generator(nn.Module):
 
         else:
             x = input_noise
-        
+            rgb = None
+            
         if only_conv1:
             return x, styles
         else:
