@@ -531,20 +531,20 @@ class Generator(nn.Module):
             self.blocks.append(block)
 
     def forward(self, styles, input_noise, conv1=True, only_conv1=False):
-        batch_size = styles.shape[0]
-        image_size = self.image_size
-
-        if self.no_const:
-            avg_style = styles.mean(dim=1)[:, :, None, None]
-            x = self.to_initial_block(avg_style)
-        else:
-            x = self.initial_block.expand(batch_size, -1, -1, -1)
-
-        rgb = None
-        styles = styles.transpose(0, 1)
-
         if conv1:
+            batch_size = styles.shape[0]
+            image_size = self.image_size
+
+            if self.no_const:
+                avg_style = styles.mean(dim=1)[:, :, None, None]
+                x = self.to_initial_block(avg_style)
+            else:
+                x = self.initial_block.expand(batch_size, -1, -1, -1)
+
+            rgb = None
+            styles = styles.transpose(0, 1)
             x = self.initial_conv(x)
+
         else:
             x = input_noise
         
