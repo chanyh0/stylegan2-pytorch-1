@@ -1017,7 +1017,7 @@ class Trainer():
             w_styles = styles_def_to_tensor(w_space)
 
             generated_images_clean, style_clean = G(w_styles, noise, only_conv1=True)
-            generated_images_adv = PGD_G(generated_images_clean, style, noise, G, D_aug)
+            generated_images_adv = PGD_G(generated_images_clean, style_clean, noise, G, D_aug)
             generated_images_clean, style_clean = G(w_styles, noise, only_conv1=True)
             generated_images_clean = G(style_clean, noise, prev_x=generated_images_clean, conv1=False)
             generated_images_adv = G(style_clean, noise, prev_x=generated_images_adv, conv1=False)
