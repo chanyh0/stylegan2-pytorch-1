@@ -1103,7 +1103,6 @@ class Trainer():
 
             if len(self.masks) != 0:
                 for k, (name, m) in enumerate(G.named_modules()):
-                    print(k, name)
                     if isinstance(m, Conv2DMod):
                         m.weight.grad.mul_(self.masks[k])
 
