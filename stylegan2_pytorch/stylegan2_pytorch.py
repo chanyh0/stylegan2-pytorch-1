@@ -909,6 +909,7 @@ class Trainer():
         print('Total conv params: {}, Pruned conv params: {}, Pruned ratio: {}'.format(total, pruned, pruned / total))
         self.init_GAN()
         for k, m in enumerate(self.GAN.G.modules()):
+            print(k, m)
             if isinstance(m, Conv2DMod):
                 m.weight.data.mul_(self.masks[k])
 
@@ -1099,6 +1100,7 @@ class Trainer():
 
             if len(self.masks) != 0:
                 for k, m in enumerate(G.modules()):
+                    print(k, m)
                     if isinstance(m, Conv2DMod):
                         m.weight.grad.mul_(self.masks[k])
 
