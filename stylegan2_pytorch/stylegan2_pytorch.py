@@ -873,14 +873,19 @@ class Trainer():
     def prune(self):
         total = 0
         total_nonzero = 0
-        for m in self.GAN.G.modules():
+        if self.is_ddp:
+            G_to_prune = self.G_ddp
+        else:
+            G_to_prune = self.GAN.G
+
+        for m in G_to_prune.modules():
             if isinstance(m, Conv2DMod):
                 total += m.weight.data.numel()
                 mask = m.weight.data.abs().clone().gt(0).float().cuda()
                 total_nonzero += torch.sum(mask)
         conv_weights = torch.zeros(total)
         index = 0
-        for m in self.GAN.G.modules():
+        for m in G_to_prune.modules():
             if isinstance(m, Conv2DMod):
                 size = m.weight.data.numel()
                 conv_weights[index:(index + size)] = m.weight.data.view(-1).abs().clone()
@@ -897,10 +902,7 @@ class Trainer():
         zero_flag = False
         self.masks = OrderedDict()
         
-        if self.is_ddp:
-            G_to_prune = self.G_ddp
-        else:
-            G_to_prune = self.GAN.G
+        
 
         for k, m in enumerate(G_to_prune.modules()):
             if isinstance(m, Conv2DMod):
