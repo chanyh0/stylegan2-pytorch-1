@@ -874,18 +874,18 @@ class Trainer():
         total = 0
         total_nonzero = 0
         if self.is_ddp:
-            G_to_prune = self.G_ddp
+            GAN_to_prune = self.G_ddp
         else:
-            G_to_prune = self.GAN.G
+            GAN_to_prune = self.GAN.G
 
-        for m in G_to_prune.modules():
+        for m in GAN_to_prune.modules():
             if isinstance(m, Conv2DMod):
                 total += m.weight.data.numel()
                 mask = m.weight.data.abs().clone().gt(0).float().cuda()
                 total_nonzero += torch.sum(mask)
         conv_weights = torch.zeros(total)
         index = 0
-        for m in G_to_prune.modules():
+        for m in GAN_to_prune.modules():
             if isinstance(m, Conv2DMod):
                 size = m.weight.data.numel()
                 conv_weights[index:(index + size)] = m.weight.data.view(-1).abs().clone()
@@ -902,20 +902,17 @@ class Trainer():
         zero_flag = False
         self.masks = OrderedDict()
         
-        
-
-        for k, m in enumerate(G_to_prune.modules()):
+        for k, m in enumerate(GAN_to_prune.modules()):
             if isinstance(m, Conv2DMod):
                 weight_copy = m.weight.data.abs().clone()
                 mask = weight_copy.gt(thre).float()
                 self.masks[k] = mask
                 pruned = pruned + mask.numel() - torch.sum(mask)
-                m.weight.data.mul_(mask)
                 print('layer index: {:d} \t total params: {:d} \t remaining params: {:d}'.
                     format(k, mask.numel(), int(torch.sum(mask))))
         print('Total conv params: {}, Pruned conv params: {}, Pruned ratio: {}'.format(total, pruned, pruned / total))
         self.init_GAN()
-        for k, m in enumerate(G_to_prune.modules()):
+        for k, m in enumerate(GAN_to_prune.modules()):
             if isinstance(m, Conv2DMod):
                 m.weight.data.mul_(self.masks[k])
 
@@ -1105,7 +1102,8 @@ class Trainer():
             total_gen_loss += loss.detach().item() / self.gradient_accumulate_every
 
             if len(self.masks) != 0:
-                for k, m in enumerate(G.modules()):
+                for k, (name, m) in enumerate(G.named_modules()):
+                    print(k, name)
                     if isinstance(m, Conv2DMod):
                         m.weight.grad.mul_(self.masks[k])
 
