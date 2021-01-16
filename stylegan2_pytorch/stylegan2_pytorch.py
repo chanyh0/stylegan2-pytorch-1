@@ -878,11 +878,15 @@ class Trainer():
         else:
             GAN_to_prune = self.GAN.G
 
-        for m in GAN_to_prune.modules():
+        for k, m in enumerate(GAN_to_prune.modules()):
             if isinstance(m, Conv2DMod):
                 total += m.weight.data.numel()
                 mask = m.weight.data.abs().clone().gt(0).float().cuda()
                 total_nonzero += torch.sum(mask)
+            
+            if (k == 58): 
+                print(m.weight)
+
         conv_weights = torch.zeros(total)
         index = 0
         for m in GAN_to_prune.modules():
@@ -915,6 +919,9 @@ class Trainer():
         for k, m in enumerate(GAN_to_prune.modules()):
             if isinstance(m, Conv2DMod):
                 m.weight.data.mul_(self.masks[k])
+            
+            if (k == 58): 
+                print(m.weight)
 
     def write_config(self):
         self.config_path.write_text(json.dumps(self.config()))
