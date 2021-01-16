@@ -898,7 +898,7 @@ class Trainer():
         self.masks = OrderedDict()
         
         if self.is_ddp:
-            G_to_prune = self.GAN.G_ddp
+            G_to_prune = self.G_ddp
         else:
             G_to_prune = self.GAN.G
 
