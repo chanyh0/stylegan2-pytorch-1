@@ -908,7 +908,7 @@ class Trainer():
                     format(k, mask.numel(), int(torch.sum(mask))))
         print('Total conv params: {}, Pruned conv params: {}, Pruned ratio: {}'.format(total, pruned, pruned / total))
         self.init_GAN()
-        for k, (name, m) in enumerate(G.named_modules()):
+        for k, (name, m) in enumerate(self.GAN.G.named_modules()):
             print(k, name)
             if isinstance(m, Conv2DMod):
                 m.weight.data.mul_(self.masks[k])
