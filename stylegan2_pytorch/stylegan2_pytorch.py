@@ -894,7 +894,7 @@ class Trainer():
     def set_data_src(self, folder):
         self.dataset = Dataset(folder, self.image_size, transparent = self.transparent, aug_prob = self.dataset_aug_prob)
         # 1k data
-        self.dataset = torch.utils.data.Subset(self.dataset, list(range(self.num_samples)))
+        #self.dataset = torch.utils.data.Subset(self.dataset, list(range(self.num_samples)))
         num_workers = num_workers = default(self.num_workers, num_cores if not self.is_ddp else 0)
         sampler = DistributedSampler(self.dataset, rank=self.rank, num_replicas=self.world_size, shuffle=True) if self.is_ddp else None
         dataloader = data.DataLoader(self.dataset, num_workers = num_workers, batch_size = math.ceil(self.batch_size / self.world_size), sampler = sampler, shuffle = not self.is_ddp, drop_last = True, pin_memory = True)
