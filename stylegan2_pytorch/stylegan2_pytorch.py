@@ -820,8 +820,6 @@ class Trainer():
         self.GAN_D_init = None
         self.GAN_G_init = None
         self.GAN_D_aug_init = None
-
-        self.masks = dict()
     
     def set_pruned_round(self, round_):
         self.pruned_round = round_
@@ -871,56 +869,6 @@ class Trainer():
         if exists(self.logger):
             self.logger.set_params(self.hparams)
 
-    def prune(self):
-        total = 0
-        total_nonzero = 0
-        if self.is_ddp:
-            GAN_to_prune = self.G_ddp
-        else:
-            GAN_to_prune = self.GAN.G
-
-        for k, m in enumerate(GAN_to_prune.modules()):
-            if isinstance(m, Conv2DMod):
-                total += m.weight.data.numel()
-                mask = m.weight.data.abs().clone().gt(0).float().cuda()
-                total_nonzero += torch.sum(mask)
-
-        conv_weights = torch.zeros(total)
-        index = 0
-        for m in GAN_to_prune.modules():
-            if isinstance(m, Conv2DMod):
-                size = m.weight.data.numel()
-                conv_weights[index:(index + size)] = m.weight.data.view(-1).abs().clone()
-                index += size
-
-        y, i = torch.sort(conv_weights)
-        # thre_index = int(total * args.percent)
-        # only care about the non zero weights
-        # e.g: total = 100, total_nonzero = 80, percent = 0.2, thre_index = 36, that means keep 64
-        thre_index = total - total_nonzero + int(total_nonzero * 0.2)
-        thre = y[int(thre_index)]
-        pruned = 0
-        print('Pruning threshold: {}'.format(thre))
-        zero_flag = False
-        self.masks = OrderedDict()
-        
-        for k, m in enumerate(GAN_to_prune.modules()):
-            if isinstance(m, Conv2DMod):
-                weight_copy = m.weight.data.abs().clone()
-                mask = weight_copy.gt(thre).float()
-                self.masks[k] = mask
-                pruned = pruned + mask.numel() - torch.sum(mask)
-                print('layer index: {:d} \t total params: {:d} \t remaining params: {:d}'.
-                    format(k, mask.numel(), int(torch.sum(mask))))
-        print('Total conv params: {}, Pruned conv params: {}, Pruned ratio: {}'.format(total, pruned, pruned / total))
-        self.init_GAN()
-        if self.is_ddp:
-            GAN_to_prune = self.G_ddp
-        else:
-            GAN_to_prune = self.GAN.G
-        for k, m in enumerate(GAN_to_prune.modules()):
-            if isinstance(m, Conv2DMod):
-                m.weight.data.mul_(self.masks[k])
         
 
     def write_config(self):
@@ -1107,11 +1055,6 @@ class Trainer():
             backwards(gen_loss, self.GAN.G_opt, loss_id = 2)
 
             total_gen_loss += loss.detach().item() / self.gradient_accumulate_every
-
-            if len(self.masks) != 0:
-                for k, (name, m) in enumerate(G.named_modules()):
-                    if isinstance(m, Conv2DMod):
-                        m.weight.grad.mul_(self.masks[k])
 
         self.g_loss = float(total_gen_loss)
         self.track(self.g_loss, 'G')
