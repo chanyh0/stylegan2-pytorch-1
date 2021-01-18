@@ -956,6 +956,10 @@ class Trainer():
 
             generated_images = G(w_styles, noise)
             detached_generated_images = generated_images.clone().detach()
+
+            detached_generated_images = random_hflip(detached_generated_images, prob=0.5)
+            detached_generated_images = DiffAugment(detached_generated_images, types=['translation', 'cutout'])
+
             fake_output_clean, fake_q_loss = D_aug(detached_generated_images, l1=False)
 
             fake_output_adv = PGD(fake_output_clean, fake_q_loss, lambda x: F.relu(1 - x), D_aug)
@@ -964,6 +968,10 @@ class Trainer():
 
             image_batch = next(self.loader).cuda(self.rank)
             image_batch.requires_grad_()
+
+            image_batch = random_hflip(image_batch, prob=0.5)
+            image_batch = DiffAugment(image_batch, types=['translation', 'cutout'])
+
             real_output_clean, real_q_loss = D_aug(image_batch, l1=False)
             real_output_adv = PGD(real_output_clean, real_q_loss, lambda x: F.relu(1 + x), D_aug)
             real_output_clean, real_q_loss = D_aug(image_batch)
@@ -1023,6 +1031,13 @@ class Trainer():
             generated_images_adv = G(style_clean, noise, prev_x=generated_images_adv, conv1=False)
             
             generated_images = generated_images_clean
+
+            generated_images_clean = random_hflip(generated_images_clean, prob=0.5)
+            generated_images_clean = DiffAugment(generated_images_clean, types=['translation', 'cutout'])
+
+            generated_images_adv = random_hflip(generated_images_adv, prob=0.5)
+            generated_images_adv = DiffAugment(generated_images_adv, types=['translation', 'cutout'])
+
             fake_output_clean, _ = D_aug(generated_images_clean)
             fake_output_adv, _ = D_aug(generated_images_adv)
             fake_output_loss = (fake_output_clean + fake_output_adv) / 2
