@@ -1368,7 +1368,7 @@ class ModelLoader:
 
 
 
-def PGD(x, q_loss, loss, model=None, steps=1, gamma=0.1):
+def PGD(x, q_loss, loss, model=None, steps=1, gamma=0.001):
     
     # Compute loss
     x_adv = x.clone()
@@ -1381,7 +1381,7 @@ def PGD(x, q_loss, loss, model=None, steps=1, gamma=0.1):
 
     return x_adv
 
-def PGD_G(x, style, input_noise, gen_model, dis_model, steps=1, gamma=0.1, eps=(1/255), randinit=False, clip=False):
+def PGD_G(x, style, input_noise, gen_model, dis_model, steps=1, gamma=0.001, eps=(1/255), randinit=False, clip=False):
     
     # Compute loss
     x_adv = x.clone()
