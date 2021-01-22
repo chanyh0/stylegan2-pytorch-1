@@ -731,6 +731,7 @@ class Trainer():
         rank = 0,
         world_size = 1,
         log = False,
+        prune_round = 0
         *args,
         **kwargs
     ):
@@ -814,7 +815,7 @@ class Trainer():
 
         self.logger = aim.Session(experiment=name) if log else None
 
-        self.pruned_round = 0
+        self.pruned_round = prune_round
 
         self.GAN_S_init = None
         self.GAN_D_init = None
