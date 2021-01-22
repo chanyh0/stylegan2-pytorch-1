@@ -28,7 +28,7 @@ def set_seed(seed):
     np.random.seed(seed)
     random.seed(seed)
 
-def run_training(rank, world_size, model_args, data, load_from, new, num_train_steps, name, seed):
+def run_training(rank, world_size, model_args, data, load_from, new, num_train_steps, name, seed, prune_round):
     is_main = rank == 0
     is_ddp = world_size > 1
 
@@ -49,13 +49,15 @@ def run_training(rank, world_size, model_args, data, load_from, new, num_train_s
     model = Trainer(**model_args)
 
     if not new:
+        if prune_round > 0:
+            model.set_pruned_round(prune_round)
         model.load(load_from)
     else:
         model.clear()
 
     model.set_data_src(data)
     
-    for state in range(10 + 1):
+    for state in range(prune_round, 10 + 1):
         model.set_pruned_round(state)
         for _ in tqdm(range(num_train_steps - model.steps), initial = model.steps, total = num_train_steps, mininterval=10., desc=f'{name}<{data}>'):
             retry_call(model.train, tries=3, exceptions=NanException)
@@ -115,7 +117,8 @@ def train_from_folder(
     multi_gpus = False,
     calculate_fid_every = None,
     seed = 42,
-    log = False
+    log = False,
+    prune_round=0
 ):
     model_args = dict(
         num_samples = num_samples,
@@ -152,7 +155,8 @@ def train_from_folder(
         dataset_aug_prob = dataset_aug_prob,
         calculate_fid_every = calculate_fid_every,
         mixed_prob = mixed_prob,
-        log = log
+        log = log,
+        prune_round=prune_round
     )
 
     if generate:
