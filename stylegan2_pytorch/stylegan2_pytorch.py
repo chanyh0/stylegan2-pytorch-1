@@ -731,7 +731,7 @@ class Trainer():
         rank = 0,
         world_size = 1,
         log = False,
-        prune_round = 0
+        prune_round = 0,
         *args,
         **kwargs
     ):
