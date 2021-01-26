@@ -743,7 +743,7 @@ class Trainer():
         rank = 0,
         world_size = 1,
         log = False,
-        mask_path = None
+        mask_path = None,
         *args,
         **kwargs
     ):
