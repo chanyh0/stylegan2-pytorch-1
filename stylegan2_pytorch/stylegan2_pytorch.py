@@ -859,7 +859,7 @@ class Trainer():
 
         if exists(self.logger):
             self.logger.set_params(self.hparams)
-            
+
         if self.is_ddp:
             if self.masks is not None:
                 for k, (name, m) in enumerate(self.G_ddp.named_modules()):
@@ -872,7 +872,7 @@ class Trainer():
                         m.weight.grad.mul_(self.masks[real_name])
         
         if self.masks is not None:
-            for k, (name, m) in enumerate(self.G.named_modules()):
+            for k, (name, m) in enumerate(self.GAN.G.named_modules()):
                 if isinstance(m, Conv2DMod):
                     if 'module.' in name:
                         real_name = name[7:]
