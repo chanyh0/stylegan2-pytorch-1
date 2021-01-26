@@ -878,6 +878,10 @@ class Trainer():
                         real_name = name[7:]
                     else:
                         real_name = name
+                    
+                    print(name)
+                    print(m.weight.data.shape)
+                    print(self.masks[real_name].shape)
                     m.weight.data.mul_(self.masks[real_name])
 
     def write_config(self):
