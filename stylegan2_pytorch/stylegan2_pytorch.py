@@ -831,7 +831,7 @@ class Trainer():
             self.masks = {}
             masks = torch.load(mask_path)['GAN']
             for name in masks:
-                if 'G.' in name:
+                if 'G.' in name and '.weight' in name:
                     self.masks[name[2:-7]] = masks[name] != 0
                 
     @property
@@ -878,7 +878,6 @@ class Trainer():
                         real_name = name[7:]
                     else:
                         real_name = name
-
                     m.weight.data.mul_(self.masks[real_name])
 
     def write_config(self):
