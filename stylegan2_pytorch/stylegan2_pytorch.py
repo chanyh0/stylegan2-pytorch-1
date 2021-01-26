@@ -879,7 +879,7 @@ class Trainer():
                     else:
                         real_name = name
 
-                    m.weight.grad.mul_(self.masks[real_name])
+                    m.weight.data.mul_(self.masks[real_name])
 
     def write_config(self):
         self.config_path.write_text(json.dumps(self.config()))
