@@ -832,7 +832,7 @@ class Trainer():
             masks = torch.load(mask_path)['GAN']
             for name in masks:
                 if 'G.' in name:
-                    self.masks[name[2:]] = masks[name] != 0
+                    self.masks[name[2:-7]] = masks[name] != 0
                 
     @property
     def image_extension(self):
