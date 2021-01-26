@@ -828,6 +828,7 @@ class Trainer():
         self.logger = aim.Session(experiment=name) if log else None
 
         if mask_path is not None:
+            self.masks = {}
             masks = torch.load(mask_path)['GAN']
             for name in masks:
                 if 'G.' in name:
