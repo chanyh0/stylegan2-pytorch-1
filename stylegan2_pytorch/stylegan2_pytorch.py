@@ -823,7 +823,7 @@ class Trainer():
         self.is_main = rank == 0
         self.rank = rank
         self.world_size = world_size
-
+        self.masks = []
         self.logger = aim.Session(experiment=name) if log else None
 
     @property
@@ -1070,6 +1070,11 @@ class Trainer():
 
         self.g_loss = float(total_gen_loss)
         self.track(self.g_loss, 'G')
+
+        if len(self.masks) != 0:
+            for k, (name, m) in enumerate(G.named_modules()):
+                if isinstance(m, Conv2DMod):
+                    m.weight.grad.mul_(self.masks[k])
 
         self.GAN.G_opt.step()
 
