@@ -493,7 +493,7 @@ class Generator(nn.Module):
         self.num_layers = int(log2(image_size) - 1)
 
         filters = [network_capacity * (2 ** (i + 1)) for i in range(self.num_layers)][::-1]
-
+        print(filters)
         set_fmap_max = partial(min, fmap_max)
         filters = list(map(set_fmap_max, filters))
         init_channels = filters[0]
