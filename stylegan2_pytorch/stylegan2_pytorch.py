@@ -743,6 +743,7 @@ class Trainer():
         rank = 0,
         world_size = 1,
         log = False,
+        mask_path = None
         *args,
         **kwargs
     ):
@@ -823,9 +824,15 @@ class Trainer():
         self.is_main = rank == 0
         self.rank = rank
         self.world_size = world_size
-        self.masks = []
+        self.masks = None
         self.logger = aim.Session(experiment=name) if log else None
 
+        if mask_path is not None:
+            masks = torch.load(mask_path)['GAN']
+            for name in masks:
+                if 'G.' in name:
+                    self.masks[name] = masks[name] != 0
+                
     @property
     def image_extension(self):
         return 'jpg' if not self.transparent else 'png'
@@ -851,6 +858,26 @@ class Trainer():
 
         if exists(self.logger):
             self.logger.set_params(self.hparams)
+        
+        if self.masks is not None:
+            for k, (name, m) in enumerate(self.G_ddp.named_modules()):
+                if isinstance(m, Conv2DMod):
+                    if 'module.' in name:
+                        real_name = name[7:]
+                    else:
+                        real_name = name
+
+                    m.weight.grad.mul_(self.masks[real_name])
+        
+        if self.masks is not None:
+            for k, (name, m) in enumerate(self.G.named_modules()):
+                if isinstance(m, Conv2DMod):
+                    if 'module.' in name:
+                        real_name = name[7:]
+                    else:
+                        real_name = name
+
+                    m.weight.grad.mul_(self.masks[real_name])
 
     def write_config(self):
         self.config_path.write_text(json.dumps(self.config()))
@@ -1071,10 +1098,15 @@ class Trainer():
         self.g_loss = float(total_gen_loss)
         self.track(self.g_loss, 'G')
 
-        if len(self.masks) != 0:
+        if self.masks is not None:
             for k, (name, m) in enumerate(G.named_modules()):
                 if isinstance(m, Conv2DMod):
-                    m.weight.grad.mul_(self.masks[k])
+                    if 'module.' in name:
+                        real_name = name[7:]
+                    else:
+                        real_name = name
+
+                    m.weight.grad.mul_(self.masks[real_name])
 
         self.GAN.G_opt.step()
 
