@@ -428,6 +428,8 @@ class Conv2DMod(nn.Module):
 class GeneratorBlock(nn.Module):
     def __init__(self, latent_dim, input_channels, filters, upsample = True, upsample_rgb = True, rgba = False):
         super().__init__()
+        print(input_channels)
+        print(filters)
         self.upsample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False) if upsample else None
 
         self.to_style1 = nn.Linear(latent_dim, input_channels)
@@ -493,7 +495,7 @@ class Generator(nn.Module):
         self.num_layers = int(log2(image_size) - 1)
 
         filters = [network_capacity * (2 ** (i + 1)) for i in range(self.num_layers)][::-1]
-
+        print(filters)
         set_fmap_max = partial(min, fmap_max)
         filters = list(map(set_fmap_max, filters))
         init_channels = filters[0]
@@ -743,6 +745,7 @@ class Trainer():
         rank = 0,
         world_size = 1,
         log = False,
+        mask_path = None,
         *args,
         **kwargs
     ):
@@ -823,9 +826,18 @@ class Trainer():
         self.is_main = rank == 0
         self.rank = rank
         self.world_size = world_size
-
+        self.masks = None
         self.logger = aim.Session(experiment=name) if log else None
 
+        if mask_path is not None:
+            self.masks = {}
+            masks = torch.load(mask_path)['GAN']
+            for name in masks:
+                if 'G.' in name and '.weight' in name:
+                    print(name)
+                    print(masks[name].shape)
+                    self.masks[name[2:-7]] = masks[name] != 0
+                
     @property
     def image_extension(self):
         return 'jpg' if not self.transparent else 'png'
@@ -851,6 +863,30 @@ class Trainer():
 
         if exists(self.logger):
             self.logger.set_params(self.hparams)
+
+        if self.is_ddp:
+            if self.masks is not None:
+                for k, (name, m) in enumerate(self.G_ddp.named_modules()):
+                    if isinstance(m, Conv2DMod):
+                        if 'module.' in name:
+                            real_name = name[7:]
+                        else:
+                            real_name = name
+
+                        m.weight.data.mul_(self.masks[real_name])
+        
+        if self.masks is not None:
+            for k, (name, m) in enumerate(self.GAN.G.named_modules()):
+                if isinstance(m, Conv2DMod):
+                    if 'module.' in name:
+                        real_name = name[7:]
+                    else:
+                        real_name = name
+                    
+                    print(name)
+                    print(m.weight.data.shape)
+                    print(self.masks[real_name].shape)
+                    m.weight.data.mul_(self.masks[real_name])
 
     def write_config(self):
         self.config_path.write_text(json.dumps(self.config()))
@@ -956,6 +992,10 @@ class Trainer():
 
             generated_images = G(w_styles, noise)
             detached_generated_images = generated_images.clone().detach()
+
+            detached_generated_images = random_hflip(detached_generated_images, prob=0.5)
+            detached_generated_images = DiffAugment(detached_generated_images, types=['translation', 'cutout'])
+
             fake_output_clean, fake_q_loss = D_aug(detached_generated_images, l1=False)
 
             fake_output_adv = PGD(fake_output_clean, fake_q_loss, lambda x: F.relu(1 - x), D_aug)
@@ -964,6 +1004,10 @@ class Trainer():
 
             image_batch = next(self.loader).cuda(self.rank)
             image_batch.requires_grad_()
+
+            image_batch = random_hflip(image_batch, prob=0.5)
+            image_batch = DiffAugment(image_batch, types=['translation', 'cutout'])
+
             real_output_clean, real_q_loss = D_aug(image_batch, l1=False)
             real_output_adv = PGD(real_output_clean, real_q_loss, lambda x: F.relu(1 + x), D_aug)
             real_output_clean, real_q_loss = D_aug(image_batch)
@@ -1023,6 +1067,13 @@ class Trainer():
             generated_images_adv = G(style_clean, noise, prev_x=generated_images_adv, conv1=False)
             
             generated_images = generated_images_clean
+
+            generated_images_clean = random_hflip(generated_images_clean, prob=0.5)
+            generated_images_clean = DiffAugment(generated_images_clean, types=['translation', 'cutout'])
+
+            generated_images_adv = random_hflip(generated_images_adv, prob=0.5)
+            generated_images_adv = DiffAugment(generated_images_adv, types=['translation', 'cutout'])
+
             fake_output_clean, _ = D_aug(generated_images_clean)
             fake_output_adv, _ = D_aug(generated_images_adv)
             fake_output_loss = (fake_output_clean + fake_output_adv) / 2
@@ -1055,6 +1106,16 @@ class Trainer():
 
         self.g_loss = float(total_gen_loss)
         self.track(self.g_loss, 'G')
+
+        if self.masks is not None:
+            for k, (name, m) in enumerate(G.named_modules()):
+                if isinstance(m, Conv2DMod):
+                    if 'module.' in name:
+                        real_name = name[7:]
+                    else:
+                        real_name = name
+
+                    m.weight.grad.mul_(self.masks[real_name])
 
         self.GAN.G_opt.step()
 
@@ -1350,7 +1411,6 @@ class ModelLoader:
         images = self.model.GAN.GE(w_tensors, noise)
         images.clamp_(0., 1.)
         return images
-
 
 
 def PGD(x, q_loss, loss, model=None, steps=1, gamma=0.001):
