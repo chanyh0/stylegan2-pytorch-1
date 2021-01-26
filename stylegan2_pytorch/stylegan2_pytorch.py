@@ -832,6 +832,8 @@ class Trainer():
             masks = torch.load(mask_path)['GAN']
             for name in masks:
                 if 'G.' in name and '.weight' in name:
+                    print(name)
+                    print(masks[name].shape)
                     self.masks[name[2:-7]] = masks[name] != 0
                 
     @property
