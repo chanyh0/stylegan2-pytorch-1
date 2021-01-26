@@ -428,6 +428,8 @@ class Conv2DMod(nn.Module):
 class GeneratorBlock(nn.Module):
     def __init__(self, latent_dim, input_channels, filters, upsample = True, upsample_rgb = True, rgba = False):
         super().__init__()
+        print(input_channels)
+        print(filters)
         self.upsample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False) if upsample else None
 
         self.to_style1 = nn.Linear(latent_dim, input_channels)
@@ -871,7 +873,7 @@ class Trainer():
                         else:
                             real_name = name
 
-                        m.weight.grad.mul_(self.masks[real_name])
+                        m.weight.data.mul_(self.masks[real_name])
         
         if self.masks is not None:
             for k, (name, m) in enumerate(self.GAN.G.named_modules()):
