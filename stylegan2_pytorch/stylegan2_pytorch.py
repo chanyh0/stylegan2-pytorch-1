@@ -43,7 +43,8 @@ except:
     APEX_AVAILABLE = False
 
 import aim
-
+print(torch.__version__)
+print(torch.cuda.is_available())
 assert torch.cuda.is_available(), 'You need to have an Nvidia GPU with CUDA installed.'
 
 num_cores = multiprocessing.cpu_count()
