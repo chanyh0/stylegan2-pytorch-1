@@ -1022,7 +1022,8 @@ class Trainer():
 
 
             # divergence = (F.relu(1 + real_output_loss) + F.relu(1 - fake_output_loss)).mean()
-            divergence = ((F.relu(1 + real_output_clean) + F.relu(1 - fake_output_clean) + F.relu(1 + real_output_adv) + F.relu(1 - fake_output_adv)) / 2).mean()
+            # divergence = ((F.relu(1 + real_output_clean) + F.relu(1 - fake_output_clean) + F.relu(1 + real_output_adv) + F.relu(1 - fake_output_adv)) / 2).mean()
+            divergence = (F.relu(1 + real_output_clean) + F.relu(1 - fake_output_clean))
             disc_loss = divergence
             real_output = real_output_clean
     
@@ -1076,7 +1077,8 @@ class Trainer():
 
             fake_output_clean, _ = D_aug(generated_images_clean)
             fake_output_adv, _ = D_aug(generated_images_adv)
-            fake_output_loss = (fake_output_clean + fake_output_adv) / 2
+            #fake_output_loss = (fake_output_clean + fake_output_adv) / 2
+            fake_output_loss = (fake_output_clean)
 
             if self.top_k_training:
                 epochs = (self.steps * batch_size * self.gradient_accumulate_every) / len(self.dataset)
@@ -1427,7 +1429,7 @@ def PGD(x, q_loss, loss, model=None, steps=1, gamma=0.003):
 
     return x_adv
 
-def PGD_G(x, style, input_noise, gen_model, dis_model, steps=1, gamma=1e-7, eps=(1/255), randinit=False, clip=False):
+def PGD_G(x, style, input_noise, gen_model, dis_model, steps=1, gamma=0, eps=(1/255), randinit=False, clip=False):
     
     # Compute loss
     x_adv = x.clone()
