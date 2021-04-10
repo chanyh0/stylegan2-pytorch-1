@@ -1023,7 +1023,7 @@ class Trainer():
 
             # divergence = (F.relu(1 + real_output_loss) + F.relu(1 - fake_output_loss)).mean()
             # divergence = ((F.relu(1 + real_output_clean) + F.relu(1 - fake_output_clean) + F.relu(1 + real_output_adv) + F.relu(1 - fake_output_adv)) / 2).mean()
-            divergence = (F.relu(1 + real_output_clean) + F.relu(1 - fake_output_clean))
+            divergence = (F.relu(1 + real_output_clean) + F.relu(1 - fake_output_clean)).mean()
             disc_loss = divergence
             real_output = real_output_clean
     
