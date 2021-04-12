@@ -996,11 +996,11 @@ class Trainer():
             detached_generated_images = random_hflip(detached_generated_images, prob=0.5)
             detached_generated_images = DiffAugment(detached_generated_images, types=['translation', 'cutout'])
 
-            fake_output_clean, fake_q_loss = D_aug(detached_generated_images, l1=False)
+            #fake_output_clean, fake_q_loss = D_aug(detached_generated_images, l1=False)
 
-            fake_output_adv = PGD(fake_output_clean, fake_q_loss, lambda x: F.relu(1 - x), D_aug)
+            #fake_output_adv = PGD(fake_output_clean, fake_q_loss, lambda x: F.relu(1 - x), D_aug)
             fake_output_clean, fake_q_loss = D_aug(detached_generated_images)
-            fake_output_adv, _ = D_aug(fake_output_adv, q=fake_q_loss, only_l1=True)
+            #fake_output_adv, _ = D_aug(fake_output_adv, q=fake_q_loss, only_l1=True)
 
             image_batch = next(self.loader).cuda(self.rank)
             image_batch.requires_grad_()
@@ -1008,17 +1008,15 @@ class Trainer():
             image_batch = random_hflip(image_batch, prob=0.5)
             image_batch = DiffAugment(image_batch, types=['translation', 'cutout'])
 
-            real_output_clean, real_q_loss = D_aug(image_batch, l1=False)
-            real_output_adv = PGD(real_output_clean, real_q_loss, lambda x: F.relu(1 + x), D_aug)
+            #real_output_clean, real_q_loss = D_aug(image_batch, l1=False)
+            #real_output_adv = PGD(real_output_clean, real_q_loss, lambda x: F.relu(1 + x), D_aug)
             real_output_clean, real_q_loss = D_aug(image_batch)
-            real_output_adv, _ = D_aug(real_output_adv, q=real_q_loss, only_l1=True)
+            #real_output_adv, _ = D_aug(real_output_adv, q=real_q_loss, only_l1=True)
 
 
             if self.rel_disc_loss:
                 real_output_clean = real_output_clean - fake_output_clean.mean()
-                fake_output_clean = fake_output_clean - real_output_clean.mean()
-                real_output_adv = fake_output_adv - real_output_adv.mean()
-                fake_output_adv = fake_output_adv - real_output_adv.mean()
+                #real_output_adv = fake_output_adv - real_output_adv.mean()
 
 
             # divergence = (F.relu(1 + real_output_loss) + F.relu(1 - fake_output_loss)).mean()
@@ -1062,21 +1060,21 @@ class Trainer():
             w_styles = styles_def_to_tensor(w_space)
 
             generated_images_clean, style_clean = G(w_styles, noise, only_conv1=True)
-            generated_images_adv = PGD_G(generated_images_clean, style_clean, noise, G, D_aug)
-            generated_images_clean, style_clean = G(w_styles, noise, only_conv1=True)
+            #generated_images_adv = PGD_G(generated_images_clean, style_clean, noise, G, D_aug)
+            #generated_images_clean, style_clean = G(w_styles, noise, only_conv1=True)
             generated_images_clean = G(style_clean, noise, prev_x=generated_images_clean, conv1=False)
-            generated_images_adv = G(style_clean, noise, prev_x=generated_images_adv, conv1=False)
+            #generated_images_adv = G(style_clean, noise, prev_x=generated_images_adv, conv1=False)
             
             generated_images = generated_images_clean
 
             generated_images_clean = random_hflip(generated_images_clean, prob=0.5)
             generated_images_clean = DiffAugment(generated_images_clean, types=['translation', 'cutout'])
 
-            generated_images_adv = random_hflip(generated_images_adv, prob=0.5)
-            generated_images_adv = DiffAugment(generated_images_adv, types=['translation', 'cutout'])
+            #generated_images_adv = random_hflip(generated_images_adv, prob=0.5)
+            #generated_images_adv = DiffAugment(generated_images_adv, types=['translation', 'cutout'])
 
             fake_output_clean, _ = D_aug(generated_images_clean)
-            fake_output_adv, _ = D_aug(generated_images_adv)
+            #fake_output_adv, _ = D_aug(generated_images_adv)
             #fake_output_loss = (fake_output_clean + fake_output_adv) / 2
             fake_output_loss = (fake_output_clean)
 
