@@ -1386,31 +1386,3 @@ class ModelLoader:
         images = self.model.GAN.GE(w_tensors, noise)
         images.clamp_(0., 1.)
         return images
-
-def PGD(x, q_loss, loss, model=None, steps=1, gamma=0.003):
-    
-    # Compute loss
-    x_adv = x.clone()
-
-    for t in range(steps):
-        out,_ = model(x_adv, q=q_loss, only_l1=True)
-        loss_adv0 = -torch.mean(loss(out))
-        grad0 = torch.autograd.grad(loss_adv0, x_adv, only_inputs=True)[0]
-        x_adv.data.add_(gamma * torch.sign(grad0.data))
-
-    return x_adv
-
-def PGD_G(x, style, input_noise, gen_model, dis_model, steps=1, gamma=0, eps=(1/255), randinit=False, clip=False):
-    
-    # Compute loss
-    x_adv = x.clone()
-
-    for t in range(steps):
-        out = gen_model(style, input_noise, prev_x=x_adv, conv1=False)
-        fake_output, _ = dis_model(out)
-        loss_adv0 = -torch.mean(fake_output)
-        grad0 = torch.autograd.grad(loss_adv0, x_adv, only_inputs=True)[0]
-        x_adv.data.add_(gamma * torch.sign(grad0.data))
-
-
-    return x_adv
