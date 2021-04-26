@@ -1410,7 +1410,7 @@ class ModelLoader:
         return images
 
 
-def PGD(x, q_loss, loss, model=None, steps=1, gamma=1e-7):
+def PGD(x, q_loss, loss, model=None, steps=1, gamma=1e-10):
     
     # Compute loss
     x_adv = x.clone()
