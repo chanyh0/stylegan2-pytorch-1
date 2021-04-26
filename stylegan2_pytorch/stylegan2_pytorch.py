@@ -43,7 +43,8 @@ except:
     APEX_AVAILABLE = False
 
 import aim
-
+print(torch.__version__)
+print(torch.cuda.is_available())
 assert torch.cuda.is_available(), 'You need to have an Nvidia GPU with CUDA installed.'
 
 num_cores = multiprocessing.cpu_count()
@@ -994,26 +995,35 @@ class Trainer():
             detached_generated_images = generated_images.clone().detach()
 
             detached_generated_images = random_hflip(detached_generated_images, prob=0.5)
-            detached_generated_images = DiffAugment(detached_generated_images, types=['translation', 'cutout'])
 
-            fake_output, fake_q_loss = D_aug(detached_generated_images)
+            fake_output_clean, fake_q_loss = D_aug(detached_generated_images, l1=False)
+
+            fake_output_adv = PGD(fake_output_clean, fake_q_loss, lambda x: F.relu(1 - x), D_aug)
+            fake_output_clean, fake_q_loss = D_aug(detached_generated_images)
+            fake_output_adv, _ = D_aug(fake_output_adv, q=fake_q_loss, only_l1=True)
+
             image_batch = next(self.loader).cuda(self.rank)
             image_batch.requires_grad_()
+
             image_batch = random_hflip(image_batch, prob=0.5)
-            image_batch = DiffAugment(image_batch, types=['translation', 'cutout'])
 
-            real_output, real_q_loss = D_aug(image_batch)
+            real_output_clean, real_q_loss = D_aug(image_batch, l1=False)
+            real_output_adv = PGD(real_output_clean, real_q_loss, lambda x: F.relu(1 + x), D_aug)
+            real_output_clean, real_q_loss = D_aug(image_batch)
+            real_output_adv, _ = D_aug(real_output_adv, q=real_q_loss, only_l1=True)
 
-
-            real_output_loss = real_output
-            fake_output_loss = fake_output
 
             if self.rel_disc_loss:
-                real_output_loss = real_output_loss - fake_output.mean()
-                fake_output_loss = fake_output_loss - real_output.mean()
+                real_output_clean = real_output_clean - fake_output_clean.mean()
+                fake_output_clean = fake_output_clean - real_output_clean.mean()
+                real_output_adv = fake_output_adv - real_output_adv.mean()
+                fake_output_adv = fake_output_adv - real_output_adv.mean()
 
-            divergence = (F.relu(1 + real_output_loss) + F.relu(1 - fake_output_loss)).mean()
+
+            # divergence = (F.relu(1 + real_output_loss) + F.relu(1 - fake_output_loss)).mean()
+            divergence = ((F.relu(1 + real_output_clean) + F.relu(1 - fake_output_clean) + F.relu(1 + real_output_adv) + F.relu(1 - fake_output_adv))).mean()
             disc_loss = divergence
+            real_output = real_output_clean
     
             if self.has_fq:
                 quantize_loss = (fake_q_loss + real_q_loss).mean()
@@ -1049,9 +1059,21 @@ class Trainer():
             w_space = latent_to_w(S, style)
             w_styles = styles_def_to_tensor(w_space)
 
-            generated_images = G(w_styles, noise)
-            fake_output, _ = D_aug(generated_images)
-            fake_output_loss = fake_output
+            generated_images_clean, style_clean = G(w_styles, noise, only_conv1=True)
+            generated_images_adv = PGD_G(generated_images_clean, style_clean, noise, G, D_aug)
+            generated_images_clean, style_clean = G(w_styles, noise, only_conv1=True)
+            generated_images_clean = G(style_clean, noise, prev_x=generated_images_clean, conv1=False)
+            generated_images_adv = G(style_clean, noise, prev_x=generated_images_adv, conv1=False)
+            
+            generated_images = generated_images_clean
+
+            generated_images_clean = random_hflip(generated_images_clean, prob=0.5)
+
+            generated_images_adv = random_hflip(generated_images_adv, prob=0.5)
+
+            fake_output_clean, _ = D_aug(generated_images_clean)
+            fake_output_adv, _ = D_aug(generated_images_adv)
+            fake_output_loss = (fake_output_clean + fake_output_adv)
 
             if self.top_k_training:
                 epochs = (self.steps * batch_size * self.gradient_accumulate_every) / len(self.dataset)
@@ -1386,3 +1408,31 @@ class ModelLoader:
         images = self.model.GAN.GE(w_tensors, noise)
         images.clamp_(0., 1.)
         return images
+
+
+def PGD(x, q_loss, loss, model=None, steps=1, gamma=1e-7):
+    
+    # Compute loss
+    x_adv = x.clone()
+
+    for t in range(steps):
+        out,_ = model(x_adv, q=q_loss, only_l1=True)
+        loss_adv0 = -torch.mean(loss(out))
+        grad0 = torch.autograd.grad(loss_adv0, x_adv, only_inputs=True)[0]
+        x_adv.data.add_(gamma * torch.sign(grad0.data))
+
+    return x_adv
+
+def PGD_G(x, style, input_noise, gen_model, dis_model, steps=1, gamma=1e-10):
+    
+    # Compute loss
+    x_adv = x.clone()
+
+    for t in range(steps):
+        out = gen_model(style, input_noise, prev_x=x_adv, conv1=False)
+        fake_output, _ = dis_model(out)
+        loss_adv0 = -torch.mean(fake_output)
+        grad0 = torch.autograd.grad(loss_adv0, x_adv, only_inputs=True)[0]
+        x_adv.data.add_(gamma * torch.sign(grad0.data))
+
+    return x_adv
