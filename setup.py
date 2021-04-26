@@ -29,7 +29,7 @@ setup(
       'numpy',
       'retry',
       'tqdm',
-      'torch',
+      'torch==1.6.0',
       'torchvision',
       'pillow',
       'vector-quantize-pytorch>=0.1.0'
